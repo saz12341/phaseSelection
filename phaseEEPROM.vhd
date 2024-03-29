@@ -17,20 +17,18 @@ entity phaseEEPROM is
     clk             : in  std_logic;  -- base clock
     rst             : in  std_logic;
     
-    -- store phase -------------------------------------------------------------
-    writeEnableMean   : in  std_logic;
-    writeDataMean     : in  std_logic_vector(kWidthShift-1 downto 0);
-    writeBusyMean     : out std_logic;
-    writeEnableWidth  : in  std_logic;
-    writeDataWidth    : in  std_logic_vector(kWidthShift-1 downto 0);
-    writeBusyWidth    : out std_logic;
+    -- stored phase information ------------------------------------------------
+    writeEnableCenter : in  std_logic;
+    writeDataCenter   : in  std_logic_vector(kWidthShift-1 downto 0);
+    writeBusyCenter   : out std_logic;
+    writeEnableLength : in  std_logic;
+    writeDataLength   : in  std_logic_vector(kWidthShift-1 downto 0);
+    writeBusyLength   : out std_logic;
     
-    readEnableMean    : in  std_logic;
-    readDataMean      : out std_logic_vector(kWidthShift-1 downto 0);
-    readValidMean     : out std_logic;
-    readEnableWidth   : in  std_logic;
-    readDataWidth     : out std_logic_vector(kWidthShift-1 downto 0);
-    readValidWidth    : out std_logic;
+    readValidCenter   : out std_logic;
+    readDataCenter    : out std_logic_vector(kWidthShift-1 downto 0);
+    readValidLength   : out std_logic;
+    readDataLength    : out std_logic_vector(kWidthShift-1 downto 0);
     
     -- AT93C460 ----------------------------------------------------------------
     CS              : out std_logic;  -- Chip Select
@@ -41,33 +39,57 @@ entity phaseEEPROM is
 end phaseEEPROM;
 
 architecture Behavioral of phaseEEPROM is
+  -- output
+  signal output_busy_center   : std_logic := '0';
+  signal output_busy_length   : std_logic := '0';
   
-  signal reg_write_mean   : std_logic := '0';
-  signal reg_wdata_mean   : std_logic_vector(kWidthShift-1 downto 0);
-  signal reg_write_width  : std_logic := '0';
-  signal reg_wdata_width  : std_logic_vector(kWidthShift-1 downto 0);
+  signal output_valid_center  : std_logic := '0';
+  signal output_data_center   : std_logic_vector(kWidthShift-1 downto 0);
+  signal output_valid_length  : std_logic := '0';
+  signal output_data_length   : std_logic_vector(kWidthShift-1 downto 0);
   
-  signal reg_read_mean    : std_logic := '0';
-  signal reg_rdata_mean   : std_logic_vector(kWidthShift-1 downto 0);
-  signal reg_valid_mean   : std_logic := '0';
-  signal reg_read_width   : std_logic := '0';
-  signal reg_rdata_width  : std_logic_vector(kWidthShift-1 downto 0);
-  signal reg_valid_width  : std_logic := '0';
+  -- input
+  signal input_write_center   : std_logic;
+  signal input_data_center    : std_logic_vector(kWidthShift-1 downto 0);
   
-  signal status_operate   : operateType       := idle;
-  signal status_eeprom    : eepromStatusType  := idle;
-  signal reg_read_data    : std_logic_vector(kWidthShift-1 downto 0);
-  signal reg_write_data   : std_logic_vector(kWidthShift-1 downto 0);
-  signal reg_status_eeprom: eepromStatusType  := idle;
+  signal input_write_length   : std_logic;
+  signal input_data_length    : std_logic_vector(kWidthShift-1 downto 0);
   
-  signal eeprom_ins       : InstructionType := idle;
-  signal eeprom_busy      : std_logic       := '0';
-  signal eeprom_addr      : std_logic_vector(kWidthAddr-1 downto 0);
-  signal eeprom_din       : std_logic_vector(kWidthData-1 downto 0);
-  signal eeprom_dout      : std_logic_vector(kWidthData-1 downto 0);
+  -- EWEN
+  signal en_ewen      : std_logic_vector(kNumWords-1 downto 0);
+  signal reg_en_ewen  : std_logic_vector(kNumWords-1 downto 0)  := (others=>'0');
+  signal reduced_en_ewen  : std_logic;
+  signal is_ewen          : std_logic;
+  -- EWDS
+  signal en_ewds      : std_logic_vector(kNumWords-1 downto 0);
+  signal reg_en_ewds  : std_logic_vector(kNumWords-1 downto 0)  := (others=>'0');
+  signal reduced_en_ewds  : std_logic;
+  signal is_ewds          : std_logic;
+  -- WRITE
+  signal en_write     : std_logic_vector(kNumWords-1 downto 0);
+  signal wdata_bus    : DataArray;
+  signal reg_en_write : std_logic_vector(kNumWords-1 downto 0)  := (others=>'0');
+  signal reg_wdata_bus: DataArray;
+  signal is_write     : std_logic_vector(kNumWords-1 downto 0);
+  -- READ
+  signal en_read      : std_logic_vector(kNumWords-1 downto 0);
+  signal reg_en_read  : std_logic_vector(kNumWords-1 downto 0)  := (others=>'0');
+  signal is_read      : std_logic_vector(kNumWords-1 downto 0);
+  signal reg_is_read  : std_logic_vector(kNumWords-1 downto 0)  := (others=>'0');
+  signal rdata_bus    : DataArray;
+    
+  -- operate
+  signal operate_en     : std_logic_vector((kNumWords*2+2)-1 downto 0);
+  signal operate_is     : std_logic_vector((kNumWords*2+2)-1 downto 0);
+  signal operate_ptr    : std_logic_vector(kNumWords-1 downto 0);
+  signal operate_rdata  : std_logic_vector(kWidthData-1 downto 0);
   
-  signal reg_eeprom_busy    : std_logic     := '0';
-  signal eeprom_complete    : std_logic     := '0';
+  -- eeprom
+  signal eeprom_ins   : instructionType   := idle;
+  signal eeprom_busy  : std_logic;
+  signal eeprom_addr  : std_logic_vector(kWidthAddr-1 downto 0);
+  signal eeprom_din   : std_logic_vector(kWidthData-1 downto 0);
+  signal eeprom_dout  : std_logic_vector(kWidthData-1 downto 0);
   
   attribute mark_debug : boolean;
   attribute mark_debug of eeprom_ins    : signal is enDEBUG;
@@ -76,292 +98,251 @@ architecture Behavioral of phaseEEPROM is
   attribute mark_debug of eeprom_din    : signal is enDEBUG;
   attribute mark_debug of eeprom_dout   : signal is enDEBUG;
 begin
-  -- output register
-  writeBusyMean   <= reg_write_mean;
-  writeBusyWidth  <= reg_write_width;
-  readDataMean    <= reg_rdata_mean;
-  readValidMean   <= reg_valid_mean;
-  readDataWidth   <= reg_rdata_width;
-  readValidWidth  <= reg_valid_width;
+  -- output port
+  writeBusyCenter <= output_busy_center;
+  writeBusyLength <= output_busy_length;
   
-  -- write mean
-  u_write_mean_process : process(clk, rst)
-  begin
-    if(rst = '1') then
-      reg_write_mean  <= '0';
-    elsif(clk'event and clk = '1') then
-      if(reg_write_mean='0' and writeEnableMean='1')then
-        reg_write_mean  <= '1';
-        reg_wdata_mean  <= writeDataMean;
-      elsif(status_operate=writeMean and status_eeprom=complete)then
-        reg_write_mean  <= '0';
-      end if;
-    end if;
-  end process u_write_mean_process;
-
-  -- write width
-  u_write_width_process : process(clk, rst)
-  begin
-    if(rst = '1') then
-      reg_write_width <= '0';
-    elsif(clk'event and clk = '1') then
-      if(reg_write_width='0' and writeEnableWidth='1')then
-        reg_write_width <= '1';
-        reg_wdata_width <= writeDataWidth;
-      elsif(status_operate=writeWidth and status_eeprom=complete)then
-        reg_write_width <= '0';
-      end if;
-    end if;
-  end process u_write_width_process;
+  readValidCenter <= output_valid_center;
+  readDataCenter  <= output_data_center;
+  readValidLength <= output_valid_length;
+  readDataLength  <= output_data_length;
   
-  -- read mean
-  u_read_mean_process : process(clk, rst)
+  -- input register ----------------------------------------------------------
+  -- write acceptable_range_center
+  u_write_center_process : process(clk, rst)
   begin
     if(rst = '1') then
-      reg_read_mean  <= '0';
+      input_write_center  <= '0';
+      output_busy_center  <= '0';
     elsif(clk'event and clk = '1') then
-      if(readEnableMean='1')then
-        reg_read_mean  <= '1';
-      elsif(status_operate=readMean and status_eeprom=complete)then
-        reg_read_mean  <= '0';
+      if(output_busy_center='0' and writeEnableCenter='1') then
+        input_write_center  <= '1';
+        input_data_center   <= writeDataCenter;
+        output_busy_center  <= '1';
+      elsif(unsigned(reg_en_ewen(kAddrShiftCenter+kWordsCenter-1  downto kAddrShiftCenter))=0 and
+            unsigned(reg_en_ewds(kAddrShiftCenter+kWordsCenter-1  downto kAddrShiftCenter))=0 and
+            unsigned(reg_en_write(kAddrShiftCenter+kWordsCenter-1 downto kAddrShiftCenter))=0 and
+            output_busy_center='1' and input_write_center='0' ) then
+        output_busy_center  <= '0';
+      else
+        input_write_center  <= '0';
       end if;
     end if;
-  end process u_read_mean_process;
-
-  reg_valid_mean  <= '0' when readEnableMean='1' else
-                     '1' when (status_operate=readMean and status_eeprom=complete) else reg_valid_mean;
-  reg_rdata_mean  <= reg_read_data when (status_operate=readMean and status_eeprom=complete) else reg_rdata_mean;
+  end process u_write_center_process;
   
-  -- read width
-  u_read_width_process : process(clk, rst)
+  gen_write_center: for i in 0 to kWordsCenter-1 generate
+    en_ewen(i+kAddrShiftCenter)   <= input_write_center;
+    en_ewds(i+kAddrShiftCenter)   <= input_write_center;
+    en_write(i+kAddrShiftCenter)  <= input_write_center;
+    wdata_bus(i+kAddrShiftCenter) <= input_data_center(kWidthData*(i+1)-1 downto kWidthData*i);
+  end generate;
+  
+  -- write acceptable_range_length
+  u_write_length_process : process(clk, rst)
   begin
     if(rst = '1') then
-      reg_read_width  <= '0';
+      input_write_length  <= '0';
+      output_busy_length  <= '0';
     elsif(clk'event and clk = '1') then
-      if(readEnableWidth='1')then
-        reg_read_width  <= '1';
-      elsif(status_operate=readWidth and status_eeprom=complete)then
-        reg_read_width  <= '0';
+      if(output_busy_length='0' and writeEnableLength='1') then
+        input_write_length  <= '1';
+        input_data_length   <= writeDataLength;
+        output_busy_length  <= '1';
+      elsif(unsigned(reg_en_ewen(kAddrShiftLength+kWordsLength-1  downto kAddrShiftLength))=0 and
+            unsigned(reg_en_ewds(kAddrShiftLength+kWordsLength-1  downto kAddrShiftLength))=0 and
+            unsigned(reg_en_write(kAddrShiftLength+kWordsLength-1 downto kAddrShiftLength))=0 and
+            output_busy_length='1' and input_write_length='0' ) then
+        output_busy_length  <= '0';
+      else
+        input_write_length  <= '0';
       end if;
     end if;
-  end process u_read_width_process;
+  end process u_write_length_process;
+  
+  gen_write_length: for i in 0 to kWordsLength-1 generate
+    en_ewen(i+kAddrShiftLength)   <= input_write_length;
+    en_ewds(i+kAddrShiftLength)   <= input_write_length;
+    en_write(i+kAddrShiftLength)  <= input_write_length;
+    wdata_bus(i+kAddrShiftLength) <= input_data_length(kWidthData*(i+1)-1 downto kWidthData*i);
+  end generate;
+  
+  -- output register ---------------------------------------------------------
+  -- read acceptable_range_center
+  output_valid_center <= '1' when unsigned(not reg_is_read(kAddrShiftCenter+kWordsCenter-1 downto kAddrShiftCenter))=0 else '0';
+  gen_read_center: for i in 0 to kWordsCenter-1 generate
+    output_data_center(kWidthData*(i+1)-1 downto kWidthData*i)  <= rdata_bus(i+kAddrShiftCenter);
+  end generate;
+  
+  -- read acceptable_range_length
+  output_valid_length <= '1' when unsigned(not reg_is_read(kAddrShiftLength+kWordsLength-1 downto kAddrShiftLength))=0 else '0';
+  gen_read_length: for i in 0 to kWordsLength-1 generate
+    output_data_length(kWidthData*(i+1)-1 downto kWidthData*i)  <= rdata_bus(i+kAddrShiftLength);
+  end generate;
+  
+  -- auto read output --------------------------------------------------------
+  gen_auto_read: for i in 0 to kNumWords-1 generate
+  u_auto_read_process : process(clk,rst)
+    variable buf_is_read  : std_logic := '0';
+    variable wait_valid   : std_logic := '0';
+  begin
+    if(rst = '1') then
+      wait_valid  := '0';
+      en_read(i)  <= '0';
+    elsif(clk'event and clk = '1') then
+        if(is_write(i)='1')then                           -- eeprom write new data
+          wait_valid  := '1';
+          en_read(i)  <= '1';
+        elsif(wait_valid='0' and reg_is_read(i)='0')then  -- output register doesn't have data
+          wait_valid  := '1';
+          en_read(i)  <= '1';
+        else
+          en_read(i)  <= '0';
+        end if;
+        if(reg_is_read(i)='1' and buf_is_read='0')then
+          wait_valid  := '0';
+        end if;
+        buf_is_read   := reg_is_read(i);
+    end if;
+  end process u_auto_read_process;
+  end generate;
+  
+  -- eeprom operate ----------------------------------------------------------
+  -- EWEN
+  gen_ewen: for i in 0 to kNumWords-1 generate
+  u_ewen_process : process(clk, rst)
+  begin
+    if(rst = '1') then
+      reg_en_ewen(i) <= '0';
+    elsif(clk'event and clk = '1') then
+      if(en_ewen(i)='1') then
+        reg_en_ewen(i) <= '1';
+      elsif(is_ewen='1') then
+        reg_en_ewen(i) <= '0';
+      end if;
+    end if;
+  end process u_ewen_process;
+  end generate;
+  reduced_en_ewen <= '1' when unsigned(reg_en_ewen)/=0 else '0';
+  
+  -- EWDS
+  gen_ends: for i in 0 to kNumWords-1 generate
+  u_ewds_process : process(clk, rst)
+  begin
+    if(rst = '1') then
+      reg_en_ewds(i) <= '0';
+    elsif(clk'event and clk = '1') then
+      if(en_ewds(i)='1') then
+        reg_en_ewds(i) <= '1';
+      elsif(is_ewds='1') then
+        reg_en_ewds(i) <= '0';
+      end if;
+    end if;
+  end process u_ewds_process;
+  end generate;
+  reduced_en_ewds <= '1' when unsigned(reg_en_ewds)/=0 else '0';
 
-  reg_valid_width <= '0' when readEnableWidth='1' else
-                     '1' when (status_operate=readWidth and status_eeprom=complete) else reg_valid_width;
-  reg_rdata_width <= reg_read_data when (status_operate=readWidth and status_eeprom=complete) else reg_rdata_width;
+  -- WRITE
+  gen_write: for i in 0 to kNumWords-1 generate
+  u_write_process : process(clk, rst)
+  begin
+    if(rst = '1') then
+      reg_en_write(i) <= '0';
+    elsif(clk'event and clk = '1') then
+      if(en_write(i)='1') then
+        reg_en_write(i)   <= '1';
+        reg_wdata_bus(i)  <= wdata_bus(i);
+      elsif(is_write(i)='1') then
+        reg_en_write(i)   <= '0';
+      end if;
+    end if;
+  end process u_write_process;
+  end generate;
+  
+  -- READ
+  gen_read: for i in 0 to kNumWords-1 generate
+  u_read_process : process(clk, rst)
+  begin
+    if(rst = '1') then
+      reg_en_read(i) <= '0';
+    elsif(clk'event and clk = '1') then
+      if(en_read(i)='1') then
+        reg_en_read(i) <= '1';
+      elsif(is_read(i)='1') then
+        reg_en_read(i) <= '0';
+      end if;
+    end if;
+  end process u_read_process;
+  reg_is_read(i)  <= '1' when is_read(i)='1' else
+                     '0' when en_read(i)='1' else reg_is_read(i);
+  rdata_bus(i)    <= operate_rdata when is_read(i)='1' else rdata_bus(i);
+  end generate;
   
   -- operate
-  u_operate_process : process(clk, rst)
-  begin
-    if(rst = '1') then
-      status_operate  <= idle;
-      status_eeprom   <= idle;
-    elsif(clk'event and clk = '1') then
-      case status_eeprom is
-        when idle       =>
-          if(reg_write_mean='1')then
-            status_operate  <= writeMean;
-            status_eeprom   <= ewen;
-          elsif(reg_write_width='1')then
-            status_operate  <= writeWidth;
-            status_eeprom   <= ewen;
-          elsif(reg_read_mean='1')then
-            status_operate  <= readMean;
-            status_eeprom   <= data1;
-          elsif(reg_read_width='1')then
-            status_operate  <= readWidth;
-            status_eeprom   <= data1;
-          else
-            status_operate  <= idle;
-            status_eeprom   <= idle;
-          end if;
-        when data1      =>
-          if(eeprom_complete='1')then
-            status_eeprom <= data2;
-          end if;
-        when data2      =>
-          if(eeprom_complete='1')then
-            status_eeprom <= data3;
-          end if;
-        when data3      =>
-          if(eeprom_complete='1')then
-            status_eeprom <= data4;
-          end if;
-        when data4      =>
-          if(eeprom_complete='1')then
-            if(status_operate=writeMean or status_operate=writeWidth)then
-              status_eeprom <= ewds;
-            else
-              status_eeprom <= complete;
-            end if;
-          end if;
-        when ewen       =>
-          if(eeprom_complete='1')then
-            status_eeprom <= data1;
-          end if;
-        when ewds       =>
-          if(eeprom_complete='1')then
-            status_eeprom <= complete;
-          end if;
-        when complete   =>
-          status_operate  <= idle;
-          status_eeprom   <= idle;
-        when others     =>
-          status_operate  <= idle;
-          status_eeprom   <= idle;
-      end case;
-    end if;
-  end process u_operate_process;
-
-  -- status eeprom 
-  u_status_eeprom_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      reg_status_eeprom <= status_eeprom; 
-    end if;
-  end process u_status_eeprom_process;
-  
-  -- eeprom instruction
-  u_eeprom_ins_process : process(clk, rst)
-  begin
-    if(rst = '1') then
-      eeprom_ins  <= idle;
-    elsif(clk'event and clk = '1') then
-      if(status_eeprom/=reg_status_eeprom)then
-        case status_eeprom is
-          when data1  =>
-            if(status_operate=writeMean or status_operate=writeWidth)then
-              eeprom_ins  <= WRITE;
-            else
-              eeprom_ins  <= READ;
-            end if;
-          when data2  =>
-            if(status_operate=writeMean or status_operate=writeWidth)then
-              eeprom_ins  <= WRITE;
-            else
-              eeprom_ins  <= READ;
-            end if;
-          when data3  =>
-            if(status_operate=writeMean or status_operate=writeWidth)then
-              eeprom_ins  <= WRITE;
-            else
-              eeprom_ins  <= READ;
-            end if;
-          when data4  =>
-            if(status_operate=writeMean or status_operate=writeWidth)then
-              eeprom_ins  <= WRITE;
-            else
-              eeprom_ins  <= READ;
-            end if;
-          when ewen   =>
-            eeprom_ins  <= EWEN;
-          when ewds   =>
-            eeprom_ins  <= EWDS;
-          when others =>
-            eeprom_ins  <= idle;
-        end case;
-      else
-        eeprom_ins  <= idle;
-      end if;
-    end if;
-  end process u_eeprom_ins_process;
-  
+  -- operate intput
+  operate_en  <= reg_en_read & reduced_en_ewds & reg_en_write & reduced_en_ewen;
+  -- operate output
+  is_ewen     <= operate_is(0);
+  is_write    <= operate_is(kNumWords downto 1);
+  is_ewds     <= operate_is(kNumWords+1);
+  is_read     <= operate_is(kNumWords*2+1 downto kNumWords+2);
   -- eeprom addr
-  u_eeprom_addr_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      if(status_operate=writeMean or status_operate=readMean)then
-        if(status_eeprom=data1)then
-          eeprom_addr <= kAddrMean1;
-        elsif(status_eeprom=data2)then
-          eeprom_addr <= kAddrMean2;
-        elsif(status_eeprom=data3)then
-          eeprom_addr <= kAddrMean3;
-        elsif(status_eeprom=data4)then
-          eeprom_addr <= kAddrMean4;
-        end if;
-      elsif(status_operate=writeWidth or status_operate=readWidth)then
-        if(status_eeprom=data1)then
-          eeprom_addr <= kAddrWidth1;
-        elsif(status_eeprom=data2)then
-          eeprom_addr <= kAddrWidth2;
-        elsif(status_eeprom=data3)then
-          eeprom_addr <= kAddrWidth3;
-        elsif(status_eeprom=data4)then
-          eeprom_addr <= kAddrWidth4;
-        end if;
-      end if;
-    end if;
-  end process u_eeprom_addr_process;
-  
+  gen_eeprom_addr: for i in 0 to kNumWords-1 generate
+    eeprom_addr <= std_logic_vector(to_unsigned(i,eeprom_addr'length)) when operate_ptr(i)='1' else (others=>'Z');
+  end generate;
   -- eeprom din
-  reg_write_data  <= reg_wdata_mean   when (status_operate=writeMean)   else
-                     reg_wdata_width  when (status_operate=writeWidth)  else
-                     reg_write_data;
-  u_eeprom_din_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      if(status_eeprom=data1)then
-        eeprom_din <= reg_write_data(kWidthData-1 downto 0);
-      elsif(status_eeprom=data2)then
-        eeprom_din <= reg_write_data(kWidthData*2-1 downto kWidthData);
-      elsif(status_eeprom=data3)then
-        eeprom_din <= reg_write_data(kWidthData*3-1 downto kWidthData*2);
-      elsif(status_eeprom=data4)then
-        eeprom_din <= reg_write_data(kWidthData*4-1 downto kWidthData*3);
-      end if;
-    end if;
-  end process u_eeprom_din_process;
+  gen_eeprom_din: for i in 0 to kNumWords-1 generate
+    eeprom_din <= reg_wdata_bus(i) when operate_ptr(i)='1' else (others=>'Z');
+  end generate;
 
-  -- eeprom dout
-  u_eeprom_dout1_process : process(clk)
+  u_operate_run_process : process(clk, rst)
+    variable buf_eeprom_busy  : std_logic;
+    variable wait_is          : std_logic := '0';
+    variable operate_run      : std_logic_vector((kNumWords*2+2)-1 downto 0)  := (others=>'0');
   begin
-    if(clk'event and clk = '1') then
-      if(status_eeprom=data1 and eeprom_complete='1' and (status_operate=readMean or status_operate=readWidth))then
-        reg_read_data(kWidthData-1 downto 0)  <= eeprom_dout;
-      end if;
-    end if;
-  end process u_eeprom_dout1_process;
-
-  u_eeprom_dout2_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      if(status_eeprom=data2 and eeprom_complete='1' and (status_operate=readMean or status_operate=readWidth))then
-        reg_read_data(kWidthData*2-1 downto kWidthData)  <= eeprom_dout;
-      end if;
-    end if;
-  end process u_eeprom_dout2_process;
-
-  u_eeprom_dout3_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      if(status_eeprom=data3 and eeprom_complete='1' and (status_operate=readMean or status_operate=readWidth))then
-        reg_read_data(kWidthData*3-1 downto kWidthData*2)  <= eeprom_dout;
-      end if;
-    end if;
-  end process u_eeprom_dout3_process;
-
-  u_eeprom_dout4_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      if(status_eeprom=data4 and eeprom_complete='1' and (status_operate=readMean or status_operate=readWidth))then
-        reg_read_data(kWidthData*4-1 downto kWidthData*3)  <= eeprom_dout;
-      end if;
-    end if;
-  end process u_eeprom_dout4_process;
-
-  -- eeprom busy
-  u_eeprom_busy_process : process(clk)
-  begin
-    if(clk'event and clk = '1') then
-      reg_eeprom_busy <= eeprom_busy;
-      if(reg_eeprom_busy='1' and eeprom_busy='0')then
-        eeprom_complete <= '1';
+    if(rst = '1') then
+      buf_eeprom_busy := '0';
+      wait_is         := '0';
+      operate_run     := (others=>'0');
+      operate_is      <= (others=>'0');
+    elsif(clk'event and clk = '1') then
+      if(unsigned(operate_run)=0) then
+        operate_run   := operate_en and std_logic_vector(unsigned(not operate_en) + 1);
+        operate_ptr   <= operate_run(kNumWords downto 1) or operate_run(kNumWords*2+1 downto kNumWords+2);
+        
+        -- eeprom_ins
+        if(operate_run(0)/='0')then
+          eeprom_ins  <= EWEN;
+        elsif(operate_run(kNumWords+1)/='0')then
+          eeprom_ins  <= EWDS;
+        elsif(unsigned(operate_run(kNumWords downto 1))/=0)then
+          eeprom_ins  <= WRITE;
+        elsif(unsigned(operate_run(kNumWords*2+1 downto kNumWords+2))/=0)then
+          eeprom_ins  <= READ;
+        else
+          eeprom_ins  <= idle;
+        end if;
+        
+        operate_is  <= (others=>'0');
+        
+      elsif(eeprom_busy='0' and buf_eeprom_busy='1') then
+        -- eeprom_ins
+        operate_is    <= operate_run;
+        operate_rdata <= eeprom_dout;
+        wait_is       := '1';
+      
+      elsif(wait_is='1' and unsigned(operate_is and operate_en)=0) then
+        operate_is    <= (others=>'0');
+        operate_run   := (others=>'0');
+        wait_is       := '0';
+      
       else
-        eeprom_complete <= '0';
+        eeprom_ins    <= idle;
+        operate_is  <= (others=>'0');
       end if;
+
+      buf_eeprom_busy := eeprom_busy;
     end if;
-  end process u_eeprom_busy_process;
+  end process u_operate_run_process;
   
   -- eeprom
   u_AT93C46DController : entity mylib.AT93C46DController

@@ -19,10 +19,10 @@ package defPhaseSelection is
   
   -- eeprom
 --  constant kAddrEepromStatus    : LocalAddressType  := x"100";  -- R,   [7:0]  get eeprom staus
---    constant kIndexEepromMean     : integer:= 0;
---    constant kIndexEepromWidth    : integer:= 1;
-  constant kAddrEepromMean      : LocalAddressType  := x"110";  -- W/R, [32:0] set/get eeprom mean value
-  constant kAddrEepromWidth     : LocalAddressType  := x"120";  -- W/R, [32:0] set/get eeprom width value
+--    constant kIndexEepromCenter   : integer:= 0;
+--    constant kIndexEepromLength   : integer:= 1;
+  constant kAddrEepromCenter    : LocalAddressType  := x"110";  -- W/R, [32:0] set/get eeprom acceptable_range_center value
+  constant kAddrEepromLength    : LocalAddressType  := x"120";  -- W/R, [32:0] set/get eeprom acceptable_range_length value
   
   -- reset condition
   constant kWaitCdceReset   : integer := 16#05FFFFFF#;
@@ -42,8 +42,8 @@ package defPhaseSelection is
                           ) return unsigned;
   function EvaluatePhase( tap_value: std_logic_vector(kWidthTap-1 downto 0);
                           bit_slip : std_logic_vector(kWidthBitSlipNum-1 downto 0);
-                          mean     : std_logic_vector(kWidthShift-1 downto 0);
-                          width    : std_logic_vector(kWidthShift-1 downto 0)      ) return std_logic;
+                          center   : std_logic_vector(kWidthShift-1 downto 0);
+                          length   : std_logic_vector(kWidthShift-1 downto 0)      ) return std_logic;
 
 end package defPhaseSelection;
 
@@ -74,15 +74,15 @@ package body defPhaseSelection is
   
   function EvaluatePhase( tap_value: std_logic_vector(kWidthTap-1 downto 0);
                           bit_slip : std_logic_vector(kWidthBitSlipNum-1 downto 0);
-                          mean     : std_logic_vector(kWidthShift-1 downto 0);
-                          width    : std_logic_vector(kWidthShift-1 downto 0)
+                          center   : std_logic_vector(kWidthShift-1 downto 0);
+                          length   : std_logic_vector(kWidthShift-1 downto 0)
                         ) return std_logic is
     variable is_right   : std_logic;
-    variable width_by2  : std_logic_vector(kWidthShift-1 downto 0);
+    variable length_by2 : std_logic_vector(kWidthShift-1 downto 0);
   begin
-    width_by2(kWidthShift-1)          := '0';
-    width_by2(kWidthShift-2 downto 0) := width(kWidthShift-1 downto 1);
-    is_right := '1' when EvaluateShift(tap_value,bit_slip)+unsigned(width_by2)-unsigned(mean)<unsigned(width) else '0';
+    length_by2(kWidthShift-1)          := '0';
+    length_by2(kWidthShift-2 downto 0) := length(kWidthShift-1 downto 1);
+    is_right := '1' when EvaluateShift(tap_value,bit_slip)+unsigned(length_by2)-unsigned(center)<unsigned(length) else '0';
     return is_right;
   end EvaluatePhase;
 

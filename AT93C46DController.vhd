@@ -94,7 +94,8 @@ begin
   -- spi_cs
   spi_cs  <= '1' when status=tx else
              '1' when status=tr else
-             '1' when status=waitReady else '0';
+             '1' when status=waitReady0 else
+             '1' when status=waitReady1 else '0';
   
   -- spi_di
   spi_di  <= reg_di(ptr_di) when status=tx else '0';
@@ -143,8 +144,6 @@ begin
               ptr_di              <= kWidthOpcode+kWidthAddr-1;
               reg_di(kWidthOpcode+kWidthAddr-1 downto kWidthAddr) <= kOpcodeREAD; 
               reg_di(kWidthAddr-1 downto 0)                       <= ins_addr; 
---              ptr_do              <= kMaxWidthDo-1;
-              ptr_do              <= kWidthData-1;
             when WRITE  =>
               status              <= tx;
               status_instruction  <= WRITE;
@@ -176,20 +175,22 @@ begin
           end if;
         
         when tr         =>
-          reg_do(ptr_do)  <= DO;
           if(ptr_do=0)then
             status  <= waitTcs;
-          else
-            ptr_do  <= ptr_do-1;
           end if;
         
         when waitTcs    =>
           status  <= idle;
         
         when waitWETcs  =>
-          status  <= waitReady;
+          status  <= waitReady0;
         
-        when waitReady  =>
+        when waitReady0  =>
+          if(DO='0')then
+            status  <= waitReady1;
+          end if;
+        
+        when waitReady1  =>
           if(DO='1')then
             status  <= waitTcs;
           end if;
@@ -199,5 +200,21 @@ begin
       end case;
     end if;
   end process u_spi_process;
+  
+  u_spi_do_process : process(spi_sk, rst)
+  begin
+    if(rst = '1') then
+      ptr_do  <= kMaxWidthDo-1;
+    elsif(spi_sk'event and spi_sk = '0') then
+      if(status_instruction=READ and (status=tx or status=tr))then
+        if( (ptr_do=kMaxWidthDo-1 and DO='0') or (ptr_do/=kMaxWidthDo-1 and ptr_do/=0) )then
+          ptr_do          <= ptr_do-1;
+        end if;
+        reg_do(ptr_do)  <= DO;
+      else
+        ptr_do  <= kMaxWidthDo-1;
+      end if;
+    end if;
+  end process u_spi_do_process;
   
 end Behavioral;

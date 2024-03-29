@@ -8,21 +8,13 @@ use mylib.defAT93C46DController.all;
 
 package defPhaseEEPROM is
    
-  constant kAddrMean1   : std_logic_vector(kWidthAddr-1 downto 0) := "0000000";
-  constant kAddrMean2   : std_logic_vector(kWidthAddr-1 downto 0) := "0000001";
-  constant kAddrMean3   : std_logic_vector(kWidthAddr-1 downto 0) := "0000010";
-  constant kAddrMean4   : std_logic_vector(kWidthAddr-1 downto 0) := "0000011";
-  constant kAddrWidth1  : std_logic_vector(kWidthAddr-1 downto 0) := "0000100";
-  constant kAddrWidth2  : std_logic_vector(kWidthAddr-1 downto 0) := "0000101";
-  constant kAddrWidth3  : std_logic_vector(kWidthAddr-1 downto 0) := "0000110";
-  constant kAddrWidth4  : std_logic_vector(kWidthAddr-1 downto 0) := "0000111";
+  constant kWordsCenter     : integer := 4;
+  constant kWordsLength     : integer := 4;
   
-  type operateType is (
-    idle, writeMean, writeWidth, readMean, readWidth
-  );
+  constant kAddrShiftCenter : integer := 0;
+  constant kAddrShiftLength : integer := kAddrShiftCenter+kWordsCenter;
+  constant kNumWords        : integer := kWordsCenter+kWordsLength;
   
-  type eepromStatusType is (
-    idle, ewen, data1, data2, data3, data4, ewds, complete
-  );
+  type DataArray    is array (integer range kNumWords-1 downto 0) of std_logic_vector(kWidthData-1 downto 0);
   
 end package defPhaseEEPROM;

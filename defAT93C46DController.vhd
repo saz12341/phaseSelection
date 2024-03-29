@@ -35,11 +35,11 @@ package defAT93C46DController is
    -- EWEN/EWDS
     -- Idle -> dataOut -> waitTcs
    -- WRITE/ERASE
-    -- Idle -> dataOut -> waitWETcs -> waitReady -> waitTcs
+    -- Idle -> dataOut -> waitWETcs -> waitReady0 -> waitReady1 -> waitTcs
    -- READ
     -- Idle -> dataOut -> dataIn -> waitTcs
   type spiStatusType is (
-    idle, tx, tr, waitTcs, waitWETcs, waitReady
+    idle, tx, tr, waitTcs, waitWETcs, waitReady0, waitReady1
   );
   
 end package defAT93C46DController;
