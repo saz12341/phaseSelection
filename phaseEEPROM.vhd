@@ -182,26 +182,15 @@ begin
   -- auto read output --------------------------------------------------------
   gen_auto_read: for i in 0 to kNumWords-1 generate
   u_auto_read_process : process(clk,rst)
-    variable buf_is_read  : std_logic := '0';
-    variable wait_valid   : std_logic := '0';
   begin
     if(rst = '1') then
-      wait_valid  := '0';
       en_read(i)  <= '0';
     elsif(clk'event and clk = '1') then
-        if(is_write(i)='1')then                           -- eeprom write new data
-          wait_valid  := '1';
-          en_read(i)  <= '1';
-        elsif(wait_valid='0' and reg_is_read(i)='0')then  -- output register doesn't have data
-          wait_valid  := '1';
-          en_read(i)  <= '1';
-        else
-          en_read(i)  <= '0';
-        end if;
-        if(reg_is_read(i)='1' and buf_is_read='0')then
-          wait_valid  := '0';
-        end if;
-        buf_is_read   := reg_is_read(i);
+      if(reg_en_read(i)='0' and (is_write(i)='1' or reg_is_read(i)='0'))then -- eeprom write new data / output register doesn't have data
+        en_read(i)  <= '1';
+      else
+        en_read(i)  <= '0';
+      end if;
     end if;
   end process u_auto_read_process;
   end generate;
@@ -272,9 +261,19 @@ begin
       end if;
     end if;
   end process u_read_process;
-  reg_is_read(i)  <= '1' when is_read(i)='1' else
-                     '0' when en_read(i)='1' else reg_is_read(i);
-  rdata_bus(i)    <= operate_rdata when is_read(i)='1' else rdata_bus(i);
+  u_read_output_process : process(clk, rst)
+  begin
+    if(rst = '1') then
+      reg_is_read(i)  <= '0';
+    elsif(clk'event and clk = '1') then
+      if(is_read(i)='1') then
+        reg_is_read(i)  <= '1';
+        rdata_bus(i)    <= operate_rdata;
+      elsif(en_write(i)='1') then
+        reg_is_read(i)  <= '0';
+      end if;
+    end if;
+  end process u_read_output_process;
   end generate;
   
   -- operate

@@ -304,7 +304,7 @@ begin
         rst_cdce        <= '1';
         err_timeout     <= '0';
         is_ready        <= '1';
-      elsif(mode='1')then     -- don't care clock phase
+      elsif(mode='0')then     -- don't care clock phase
         rst_cdce        <= '0';
         err_timeout     <= '0';
         is_ready        <= '1';
