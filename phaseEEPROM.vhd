@@ -109,13 +109,13 @@ begin
   
   -- input register ----------------------------------------------------------
   -- write acceptable_range_center
-  u_write_center_process : process(clk, rst)
+  u_write_center_process : process(clk)
   begin
-    if(rst = '1') then
-      input_write_center  <= '0';
-      output_busy_center  <= '0';
-    elsif(clk'event and clk = '1') then
-      if(output_busy_center='0' and writeEnableCenter='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        input_write_center  <= '0';
+        output_busy_center  <= '0';
+      elsif(output_busy_center='0' and writeEnableCenter='1') then
         input_write_center  <= '1';
         input_data_center   <= writeDataCenter;
         output_busy_center  <= '1';
@@ -138,13 +138,13 @@ begin
   end generate;
   
   -- write acceptable_range_length
-  u_write_length_process : process(clk, rst)
+  u_write_length_process : process(clk)
   begin
-    if(rst = '1') then
-      input_write_length  <= '0';
-      output_busy_length  <= '0';
-    elsif(clk'event and clk = '1') then
-      if(output_busy_length='0' and writeEnableLength='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        input_write_length  <= '0';
+        output_busy_length  <= '0';
+      elsif(output_busy_length='0' and writeEnableLength='1') then
         input_write_length  <= '1';
         input_data_length   <= writeDataLength;
         output_busy_length  <= '1';
@@ -181,12 +181,12 @@ begin
   
   -- auto read output --------------------------------------------------------
   gen_auto_read: for i in 0 to kNumWords-1 generate
-  u_auto_read_process : process(clk,rst)
+  u_auto_read_process : process(clk)
   begin
-    if(rst = '1') then
-      en_read(i)  <= '0';
-    elsif(clk'event and clk = '1') then
-      if(reg_en_read(i)='0' and (is_write(i)='1' or reg_is_read(i)='0'))then -- eeprom write new data / output register doesn't have data
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        en_read(i)  <= '0';
+      elsif(reg_en_read(i)='0' and (is_write(i)='1' or reg_is_read(i)='0'))then -- eeprom write new data / output register doesn't have data
         en_read(i)  <= '1';
       else
         en_read(i)  <= '0';
@@ -198,12 +198,12 @@ begin
   -- eeprom operate ----------------------------------------------------------
   -- EWEN
   gen_ewen: for i in 0 to kNumWords-1 generate
-  u_ewen_process : process(clk, rst)
+  u_ewen_process : process(clk)
   begin
-    if(rst = '1') then
-      reg_en_ewen(i) <= '0';
-    elsif(clk'event and clk = '1') then
-      if(en_ewen(i)='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        reg_en_ewen(i) <= '0';
+      elsif(en_ewen(i)='1') then
         reg_en_ewen(i) <= '1';
       elsif(is_ewen='1') then
         reg_en_ewen(i) <= '0';
@@ -215,12 +215,12 @@ begin
   
   -- EWDS
   gen_ends: for i in 0 to kNumWords-1 generate
-  u_ewds_process : process(clk, rst)
+  u_ewds_process : process(clk)
   begin
-    if(rst = '1') then
-      reg_en_ewds(i) <= '0';
-    elsif(clk'event and clk = '1') then
-      if(en_ewds(i)='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        reg_en_ewds(i) <= '0';
+      elsif(en_ewds(i)='1') then
         reg_en_ewds(i) <= '1';
       elsif(is_ewds='1') then
         reg_en_ewds(i) <= '0';
@@ -232,12 +232,12 @@ begin
 
   -- WRITE
   gen_write: for i in 0 to kNumWords-1 generate
-  u_write_process : process(clk, rst)
+  u_write_process : process(clk)
   begin
-    if(rst = '1') then
-      reg_en_write(i) <= '0';
-    elsif(clk'event and clk = '1') then
-      if(en_write(i)='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        reg_en_write(i) <= '0';
+      elsif(en_write(i)='1') then
         reg_en_write(i)   <= '1';
         reg_wdata_bus(i)  <= wdata_bus(i);
       elsif(is_write(i)='1') then
@@ -249,24 +249,24 @@ begin
   
   -- READ
   gen_read: for i in 0 to kNumWords-1 generate
-  u_read_process : process(clk, rst)
+  u_read_process : process(clk)
   begin
-    if(rst = '1') then
-      reg_en_read(i) <= '0';
-    elsif(clk'event and clk = '1') then
-      if(en_read(i)='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        reg_en_read(i) <= '0';
+      elsif(en_read(i)='1') then
         reg_en_read(i) <= '1';
       elsif(is_read(i)='1') then
         reg_en_read(i) <= '0';
       end if;
     end if;
   end process u_read_process;
-  u_read_output_process : process(clk, rst)
+  u_read_output_process : process(clk)
   begin
-    if(rst = '1') then
-      reg_is_read(i)  <= '0';
-    elsif(clk'event and clk = '1') then
-      if(is_read(i)='1') then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        reg_is_read(i)  <= '0';
+      elsif(is_read(i)='1') then
         reg_is_read(i)  <= '1';
         rdata_bus(i)    <= operate_rdata;
       elsif(en_write(i)='1') then
@@ -293,18 +293,19 @@ begin
     eeprom_din <= reg_wdata_bus(i) when operate_ptr(i)='1' else (others=>'Z');
   end generate;
 
-  u_operate_run_process : process(clk, rst)
+  u_operate_run_process : process(clk)
     variable buf_eeprom_busy  : std_logic;
     variable wait_is          : std_logic := '0';
     variable operate_run      : std_logic_vector((kNumWords*2+2)-1 downto 0)  := (others=>'0');
   begin
-    if(rst = '1') then
-      buf_eeprom_busy := '0';
-      wait_is         := '0';
-      operate_run     := (others=>'0');
-      operate_is      <= (others=>'0');
-    elsif(clk'event and clk = '1') then
-      if(unsigned(operate_run)=0) then
+    if(clk'event and clk = '1') then
+      if(rst = '1') then
+        buf_eeprom_busy := '0';
+        wait_is         := '0';
+        operate_run     := (others=>'0');
+        operate_is      <= (others=>'0');
+      
+      elsif(unsigned(operate_run)=0) then
         operate_run   := operate_en and std_logic_vector(unsigned(not operate_en) + 1);
         operate_ptr   <= operate_run(kNumWords downto 1) or operate_run(kNumWords*2+1 downto kNumWords+2);
         

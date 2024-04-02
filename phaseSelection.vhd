@@ -17,13 +17,13 @@ entity phaseSelection is
     enDEBUG         : boolean := false
   );
   port ( 
-    clk_base        : in  std_logic;  -- base clock       (CDCE62002)
-    rst_base        : in  std_logic;  -- base clock reset (CDCE62002)
-    clk_sys         : in  std_logic;  -- system clock
-    rst_sys         : in  std_logic;  -- system reset
+    clkBase         : in  std_logic;  -- base clock       (CDCE62002)
+    rstBase         : in  std_logic;  -- base clock reset (CDCE62002)
+    clkSys          : in  std_logic;  -- system clock
+    rstSys          : in  std_logic;  -- system reset
     
     -- input information -------------------------------------------------------
-    mode            : in  std_logic;  -- mode 0:non-require / 1:EEPROM
+    enPhaseSelection: in  std_logic;  -- 0:disable / 1:enable
     mikumariLinkUp  : in  std_logic;
     tapValue        : in  std_logic_vector(kWidthTap-1 downto 0);
     bitSlipNum      : in  std_logic_vector(kWidthBitSlipNum-1 downto 0);
@@ -101,8 +101,12 @@ architecture Behavioral of phaseSelection is
   signal bus_center_rd        : std_logic_vector(kWidthShift-1 downto 0);
   signal bus_length_rd        : std_logic_vector(kWidthShift-1 downto 0);
   
-  -- local bus --
+  -- local bus
   signal state_lbus           : BusProcessType;
+  
+  -- synchronize reset
+  signal sync_rst_base        : std_logic;
+  signal sync_rst_sys         : std_logic;
   
   attribute mark_debug : boolean;
   attribute mark_debug of input_tapvalue      : signal is enDEBUG;
@@ -128,8 +132,8 @@ begin
   -- input signal
   xpm_cdc_mikumarilinkup : xpm_cdc_single
   port map (
-    src_clk   => clk_base,
-    dest_clk  => clk_sys,
+    src_clk   => clkBase,
+    dest_clk  => clkSys,
     src_in    => mikumariLinkUp,
     dest_out  => input_mikumarilinkup
   );
@@ -139,8 +143,8 @@ begin
     WIDTH     => kWidthTap
   )
   port map (
-    src_clk   => clk_base,
-    dest_clk  => clk_sys,
+    src_clk   => clkBase,
+    dest_clk  => clkSys,
     src_in    => tapValue,
     dest_out  => input_tapvalue
   );
@@ -150,15 +154,15 @@ begin
     width     => kWidthBitSlipNum
   )
   port map (
-    src_clk   => clk_base,
-    dest_clk  => clk_sys,
+    src_clk   => clkBase,
+    dest_clk  => clkSys,
     src_in    => bitSlipNum,
     dest_out  => input_bitslipnum
   );
   
   syn_cdcelocked : entity mylib.synchronizer
   port map (
-    clk       => clk_sys,
+    clk       => clkSys,
     dIn       => cdceLocked,
     dOut      => input_cdcelocked
   );
@@ -166,16 +170,16 @@ begin
   -- output signal
   xpm_cdc_init_cbt : xpm_cdc_single
   port map (
-    src_clk   => clk_sys,
-    dest_clk  => clk_base,
+    src_clk   => clkSys,
+    dest_clk  => clkBase,
     src_in    => init_cbt,
     dest_out  => output_init_cbt
   );
   
   xpm_cdc_is_ready : xpm_cdc_single
   port map (
-    src_clk   => clk_sys,
-    dest_clk  => clk_base,
+    src_clk   => clkSys,
+    dest_clk  => clkBase,
     src_in    => is_ready,
     dest_out  => output_is_ready
   );
@@ -183,20 +187,20 @@ begin
   -- user local bus
   xpm_cdc_rst_phase : xpm_cdc_pulse
   port map (
-    src_clk     => clk_base,
-    src_rst     => rst_base,
-    dest_clk    => clk_sys,
-    dest_rst    => rst_sys,
+    src_clk     => clkBase,
+    src_rst     => sync_rst_base,
+    dest_clk    => clkSys,
+    dest_rst    => sync_rst_sys,
     src_pulse   => bus_rst_phase,
     dest_pulse  => rst_phase
   );
   
   xpm_cdc_center_we : xpm_cdc_pulse
   port map (
-    src_clk     => clk_base,
-    src_rst     => rst_base,
-    dest_clk    => clk_sys,
-    dest_rst    => rst_sys,
+    src_clk     => clkBase,
+    src_rst     => sync_rst_base,
+    dest_clk    => clkSys,
+    dest_rst    => sync_rst_sys,
     src_pulse   => bus_center_we,
     dest_pulse  => eeprom_center_we
   );
@@ -206,18 +210,18 @@ begin
     width     => kWidthShift
   )
   port map (
-    src_clk   => clk_base,
-    dest_clk  => clk_sys,
+    src_clk   => clkBase,
+    dest_clk  => clkSys,
     src_in    => bus_center_wd,
     dest_out  => eeprom_center_wd
   );
   
   xpm_cdc_length_we : xpm_cdc_pulse
   port map (
-    src_clk     => clk_base,
-    src_rst     => rst_base,
-    dest_clk    => clk_sys,
-    dest_rst    => rst_sys,
+    src_clk     => clkBase,
+    src_rst     => sync_rst_base,
+    dest_clk    => clkSys,
+    dest_rst    => sync_rst_sys,
     src_pulse   => bus_length_we,
     dest_pulse  => eeprom_length_we
   );
@@ -227,8 +231,8 @@ begin
     width     => kWidthShift
   )
   port map (
-    src_clk   => clk_base,
-    dest_clk  => clk_sys,
+    src_clk   => clkBase,
+    dest_clk  => clkSys,
     src_in    => bus_length_wd,
     dest_out  => eeprom_length_wd
   );
@@ -238,8 +242,8 @@ begin
     width     => 8
   )
   port map (
-    src_clk   => clk_sys,
-    dest_clk  => clk_base,
+    src_clk   => clkSys,
+    dest_clk  => clkBase,
     src_in    => status_function,
     dest_out  => bus_status_function
   );
@@ -249,8 +253,8 @@ begin
     width     => kWidthShift
   )
   port map (
-    src_clk   => clk_sys,
-    dest_clk  => clk_base,
+    src_clk   => clkSys,
+    dest_clk  => clkBase,
     src_in    => shift_value,
     dest_out  => bus_shift_value
   );
@@ -260,8 +264,8 @@ begin
     width     => kWidthShift
   )
   port map (
-    src_clk   => clk_sys,
-    dest_clk  => clk_base,
+    src_clk   => clkSys,
+    dest_clk  => clkBase,
     src_in    => eeprom_center_rd,
     dest_out  => bus_center_rd
   );
@@ -271,8 +275,8 @@ begin
     width     => kWidthShift
   )
   port map (
-    src_clk   => clk_sys,
-    dest_clk  => clk_base,
+    src_clk   => clkSys,
+    dest_clk  => clkBase,
     src_in    => eeprom_length_rd,
     dest_out  => bus_length_rd
   );
@@ -285,26 +289,26 @@ begin
   shift_value       <= std_logic_vector(EvaluateShift(input_tapvalue,input_bitslipnum)); 
   is_required_phase <= EvaluatePhase(input_tapvalue,input_bitslipnum,eeprom_center_rd,eeprom_length_rd);
   
-  u_rst_phase_selection_process : process(clk_sys,rst_sys)
+  u_rst_phase_selection_process : process(clkSys)
     variable buf_init_cbt     : std_logic := '0';
     variable finish_init_cbt  : std_logic := '0';
     variable counter_timeout  : integer   := kMaxTimeCdceReset;
   begin
-    if(rst_sys = '1') then
-      buf_init_cbt    := '0';
-      finish_init_cbt := '1';
-      counter_timeout := kMaxTimeCdceReset;
-      rst_cdce        <= '0';
-      is_ready        <= '0';
-      err_timeout     <= '0';
-    elsif(clk_sys'event and clk_sys = '1') then
+    if(clkSys'event and clkSys = '1') then
+      if(sync_rst_sys = '1') then
+        buf_init_cbt    := '0';
+        finish_init_cbt := '1';
+        counter_timeout := kMaxTimeCdceReset;
+        rst_cdce        <= '0';
+        is_ready        <= '0';
+        err_timeout     <= '0';
       -- When the CDCE62002 is reset?
-      if(rst_phase='1')then   -- PC requires reset CDCE62002 clock
+      elsif(rst_phase='1')then          -- PC requires reset CDCE62002 clock
         counter_timeout := kMaxTimeCdceReset;
         rst_cdce        <= '1';
         err_timeout     <= '0';
         is_ready        <= '1';
-      elsif(mode='0')then     -- don't care clock phase
+      elsif(enPhaseSelection='0')then   -- disable clock phase selection
         rst_cdce        <= '0';
         err_timeout     <= '0';
         is_ready        <= '1';
@@ -341,8 +345,8 @@ begin
     enDEBUG           => enDEBUG
   )
   port map(
-    clk               => clk_sys,
-    rst               => rst_sys,
+    clk               => clkSys,
+    rst               => sync_rst_sys,
     
     writeEnableCenter => eeprom_center_we, 
     writeDataCenter   => eeprom_center_wd,
@@ -364,11 +368,11 @@ begin
   
   -- operate_process
   -- rst_cdce
-  u_rst_cdce_process : process(clk_sys)
+  u_rst_cdce_process : process(clkSys)
     variable buf_rst_cdce : std_logic := '0';
     variable counter      : integer   := 0;
   begin
-    if(clk_sys'event and clk_sys = '1') then
+    if(clkSys'event and clkSys = '1') then
       if(rst_cdce='1' and buf_rst_cdce='0')then -- this unit requires cdce reset
         counter         := kWaitCdceReset;
         output_rst_cdce <= '1';
@@ -383,10 +387,10 @@ begin
   end process u_rst_cdce_process;
 
   -- init_cbt
-  u_init_cbt_process : process(clk_sys)
+  u_init_cbt_process : process(clkSys)
     variable counter      : integer   := 0;
   begin
-    if(clk_sys'event and clk_sys = '1') then
+    if(clkSys'event and clkSys = '1') then
       if(output_rst_cdce='1' or input_cdcelocked='0')then -- this unit requires cdce reset / cdce is un-locked
         counter   := kWaitCdceStable;
         init_cbt  <= '1';
@@ -401,146 +405,154 @@ begin
   
   -- based clock domain --------------------------------------------------------------
   -- local bus
-  u_bus_process : process(clk_base, rst_base)
+  u_bus_process : process(clkBase)
   begin
-    if(rst_base = '1') then
-      state_lbus      <= Init;
-      dataLocalBusOut <= (others=>'0');
-      readyLocalBus		<= '0';
-      bus_center_we   <= '0';
-      bus_length_we   <= '0';
-      bus_rst_phase   <= '0';
-    
-    elsif(clk_base'event and clk_base = '1') then
-      case state_lbus is
-        when Init =>
-          state_lbus		  <= Idle;
-          dataLocalBusOut <= (others=>'0');
-          readyLocalBus		<= '0';
-          bus_center_we   <= '0';
-          bus_length_we   <= '0';
-          bus_rst_phase   <= '0';
-          
-        when Idle =>
-          readyLocalBus	<= '0';
-          if(weLocalBus = '1' or reLocalBus = '1') then
-            state_lbus	<= Connect;
-          end if;
-          
-        when Connect =>
-          if(weLocalBus = '1') then
-            state_lbus	<= Write;
-          else
-            state_lbus	<= Read;
-          end if;
-          
-        when Write =>
-          if(addrLocalBus(kNonMultiByte'range) = kAddrPhaseOperate(kNonMultiByte'range)) then
-            bus_rst_phase <= '1';
-          
-          elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromCenter(kNonMultiByte'range)) then
-            case addrLocalBus(kMultiByte'range) is
-              when k1stByte =>
-                bus_center_wd(7 downto 0)   <= dataLocalBusIn;
-              when k2ndByte =>
-                bus_center_wd(15 downto 8)  <= dataLocalBusIn;
-              when k3rdByte =>
-                bus_center_wd(23 downto 16) <= dataLocalBusIn;
-              when k4thByte =>
-                bus_center_wd(31 downto 24) <= dataLocalBusIn;
-                bus_center_we <= '1';
-              when others =>
-                null;
-            end case;
-          
-          elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromLength(kNonMultiByte'range)) then
-            case addrLocalBus(kMultiByte'range) is
-              when k1stByte =>
-                bus_length_wd(7 downto 0)   <= dataLocalBusIn;
-              when k2ndByte =>
-                bus_length_wd(15 downto 8)  <= dataLocalBusIn;
-              when k3rdByte =>
-                bus_length_wd(23 downto 16) <= dataLocalBusIn;
-              when k4thByte =>
-                bus_length_wd(31 downto 24) <= dataLocalBusIn;
-                bus_length_we <= '1';
-              when others =>
-                null;
-            end case;
-          
-          else
-            null;
-          end if;
+    if(clkBase'event and clkBase = '1') then
+      if(sync_rst_base = '1') then
+        state_lbus      <= Init;
+        dataLocalBusOut <= (others=>'0');
+        readyLocalBus		<= '0';
+        bus_center_we   <= '0';
+        bus_length_we   <= '0';
+        bus_rst_phase   <= '0';
+      else
+        case state_lbus is
+          when Init =>
+            state_lbus		  <= Idle;
+            dataLocalBusOut <= (others=>'0');
+            readyLocalBus		<= '0';
+            bus_center_we   <= '0';
+            bus_length_we   <= '0';
+            bus_rst_phase   <= '0';
+            
+          when Idle =>
+            readyLocalBus	<= '0';
+            if(weLocalBus = '1' or reLocalBus = '1') then
+              state_lbus	<= Connect;
+            end if;
+            
+          when Connect =>
+            if(weLocalBus = '1') then
+              state_lbus	<= Write;
+            else
+              state_lbus	<= Read;
+            end if;
+            
+          when Write =>
+            if(addrLocalBus(kNonMultiByte'range) = kAddrPhaseOperate(kNonMultiByte'range)) then
+              bus_rst_phase <= '1';
+            
+            elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromCenter(kNonMultiByte'range)) then
+              case addrLocalBus(kMultiByte'range) is
+                when k1stByte =>
+                  bus_center_wd(7 downto 0)   <= dataLocalBusIn;
+                when k2ndByte =>
+                  bus_center_wd(15 downto 8)  <= dataLocalBusIn;
+                when k3rdByte =>
+                  bus_center_wd(23 downto 16) <= dataLocalBusIn;
+                when k4thByte =>
+                  bus_center_wd(31 downto 24) <= dataLocalBusIn;
+                  bus_center_we <= '1';
+                when others =>
+                  null;
+              end case;
+            
+            elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromLength(kNonMultiByte'range)) then
+              case addrLocalBus(kMultiByte'range) is
+                when k1stByte =>
+                  bus_length_wd(7 downto 0)   <= dataLocalBusIn;
+                when k2ndByte =>
+                  bus_length_wd(15 downto 8)  <= dataLocalBusIn;
+                when k3rdByte =>
+                  bus_length_wd(23 downto 16) <= dataLocalBusIn;
+                when k4thByte =>
+                  bus_length_wd(31 downto 24) <= dataLocalBusIn;
+                  bus_length_we <= '1';
+                when others =>
+                  null;
+              end case;
+            
+            else
+              null;
+            end if;
 
-          state_lbus	<= Done;
-          
-        when Read =>
-          if(addrLocalBus(kNonMultiByte'range) = kAddrPhaseStatus(kNonMultiByte'range)) then
-                dataLocalBusOut <= bus_status_function;
-          
-          elsif(addrLocalBus(kNonMultiByte'range) = kAddrShift(kNonMultiByte'range)) then
-            case addrLocalBus(kMultiByte'range) is
-              when k1stByte =>
-                dataLocalBusOut <= bus_shift_value(7 downto 0);
-              when k2ndByte =>
-                dataLocalBusOut <= bus_shift_value(15 downto 8);
-              when k3rdByte =>
-                dataLocalBusOut <= bus_shift_value(23 downto 16);
-              when k4thByte =>
-                dataLocalBusOut <= bus_shift_value(31 downto 24);
-              when others =>
-                null;
-            end case;
-          
-          elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromCenter(kNonMultiByte'range)) then
-            case addrLocalBus(kMultiByte'range) is
-              when k1stByte =>
-                dataLocalBusOut <= bus_center_rd(7 downto 0);
-              when k2ndByte =>
-                dataLocalBusOut <= bus_center_rd(15 downto 8);
-              when k3rdByte =>
-                dataLocalBusOut <= bus_center_rd(23 downto 16);
-              when k4thByte =>
-                dataLocalBusOut <= bus_center_rd(31 downto 24);
-              when others =>
-                null;
-            end case;
-          
-          elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromLength(kNonMultiByte'range)) then
-            case addrLocalBus(kMultiByte'range) is
-              when k1stByte =>
-                dataLocalBusOut <= bus_length_rd(7 downto 0);
-              when k2ndByte =>
-                dataLocalBusOut <= bus_length_rd(15 downto 8);
-              when k3rdByte =>
-                dataLocalBusOut <= bus_length_rd(23 downto 16);
-              when k4thByte =>
-                dataLocalBusOut <= bus_length_rd(31 downto 24);
-              when others =>
-                null;
-            end case;
+            state_lbus	<= Done;
+            
+          when Read =>
+            if(addrLocalBus(kNonMultiByte'range) = kAddrPhaseStatus(kNonMultiByte'range)) then
+                  dataLocalBusOut <= bus_status_function;
+            
+            elsif(addrLocalBus(kNonMultiByte'range) = kAddrShift(kNonMultiByte'range)) then
+              case addrLocalBus(kMultiByte'range) is
+                when k1stByte =>
+                  dataLocalBusOut <= bus_shift_value(7 downto 0);
+                when k2ndByte =>
+                  dataLocalBusOut <= bus_shift_value(15 downto 8);
+                when k3rdByte =>
+                  dataLocalBusOut <= bus_shift_value(23 downto 16);
+                when k4thByte =>
+                  dataLocalBusOut <= bus_shift_value(31 downto 24);
+                when others =>
+                  null;
+              end case;
+            
+            elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromCenter(kNonMultiByte'range)) then
+              case addrLocalBus(kMultiByte'range) is
+                when k1stByte =>
+                  dataLocalBusOut <= bus_center_rd(7 downto 0);
+                when k2ndByte =>
+                  dataLocalBusOut <= bus_center_rd(15 downto 8);
+                when k3rdByte =>
+                  dataLocalBusOut <= bus_center_rd(23 downto 16);
+                when k4thByte =>
+                  dataLocalBusOut <= bus_center_rd(31 downto 24);
+                when others =>
+                  null;
+              end case;
+            
+            elsif(addrLocalBus(kNonMultiByte'range) = kAddrEepromLength(kNonMultiByte'range)) then
+              case addrLocalBus(kMultiByte'range) is
+                when k1stByte =>
+                  dataLocalBusOut <= bus_length_rd(7 downto 0);
+                when k2ndByte =>
+                  dataLocalBusOut <= bus_length_rd(15 downto 8);
+                when k3rdByte =>
+                  dataLocalBusOut <= bus_length_rd(23 downto 16);
+                when k4thByte =>
+                  dataLocalBusOut <= bus_length_rd(31 downto 24);
+                when others =>
+                  null;
+              end case;
 
-          else
-            null;
-          end if;
-          
-          state_lbus  <= Done;
-          
-        when Done =>
-          readyLocalBus <= '1';
-          if(weLocalBus = '0' and reLocalBus = '0') then
-            state_lbus  <= Idle;
-          end if;
-          
-          bus_center_we <= '0';
-          bus_length_we <= '0';
-          bus_rst_phase <= '0';
-          
-        -- probably this is error --
-        when others =>
-          state_lbus	<= Init;
-      end case;
+            else
+              null;
+            end if;
+            
+            state_lbus  <= Done;
+            
+          when Done =>
+            readyLocalBus <= '1';
+            if(weLocalBus = '0' and reLocalBus = '0') then
+              state_lbus  <= Idle;
+            end if;
+            
+            bus_center_we <= '0';
+            bus_length_we <= '0';
+            bus_rst_phase <= '0';
+            
+          -- probably this is error --
+          when others =>
+            state_lbus	<= Init;
+        end case;
+      end if;
     end if;
   end process u_bus_process;
+  
+  -- Reset sequence --
+  u_reset_gen_base   : entity mylib.ResetGen
+    port map(rstBase, clkBase, sync_rst_base);
+  
+  u_reset_gen_sys    : entity mylib.ResetGen
+    port map(rstSys, clkSys, sync_rst_sys);
   
 end Behavioral;
